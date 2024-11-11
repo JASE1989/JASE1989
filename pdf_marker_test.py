@@ -4,7 +4,6 @@ import fitz  # PyMuPDF
 import easyocr
 import pandas as pd
 from io import BytesIO
-import streamlit as st
 import cv2
 import numpy as np
 
