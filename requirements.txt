@@ -1,0 +1,4 @@
+PyMuPDF
+easyocr
+pandas
+opencv-python-headless
