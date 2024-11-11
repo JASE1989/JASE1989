@@ -1,4 +1,7 @@
-PyMuPDF
+pymupdf
 easyocr
+opencv-python
 pandas
-opencv-python-headless
+numpy
+streamlit
+openpyxl
