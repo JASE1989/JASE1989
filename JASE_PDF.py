@@ -40,12 +40,6 @@ def remove_skew(image):
 def rotate_vertical_text(image):
     return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
-# Funksjon for å rotere PDF-side for vertikal tekst
-def rotate_page_for_vertical_text(page):
-    matrix = fitz.Matrix(0, -1, 1, 0)  # 90-graders rotasjon
-    page.set_rotation(90)  # Oppdaterer siden internt
-    return page
-
 # Funksjon for å justere markeringsrute størrelse
 def adjust_rectangle(rect, adjustment=4):
     x0, y0, x1, y1 = rect
@@ -122,9 +116,21 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
     doc.close()
     output_pdf.seek(0)
     return output_pdf, all_found_tags
-
 # Funksjon for PyMuPDF og å markere tags i PDF
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
+    """
+    Marker tagger i PDF-filen ved bruk av PyMuPDF, inkludert støtte for vertikal tekst.
+
+    Args:
+        input_pdf (fitz.Document): PDF-dokumentet som skal prosesseres.
+        tags (list): Liste over tagger som skal søkes etter.
+        match_strictness (str): Nivå for strenghet i søk (Streng, Moderat, Tolerant).
+        rect_adjustment (int): Justering av markeringsrektangelstørrelsen.
+
+    Returns:
+        BytesIO: PDF med markerte tagger.
+        set: Alle funne tagger.
+    """
     doc = input_pdf
     tags_found = []
     tags_not_found = tags.copy()
@@ -143,24 +149,30 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
     for page_num in range(doc.page_count):
         page = doc[page_num]
 
-        # Rotér side for vertikal tekst (valgfritt)
-        rotated_page = rotate_page_for_vertical_text(page)
+        # Prøv ulike rotasjoner (0°, 90°, 180°, 270°)
+        for rotation in [0, 90, 180, 270]:
+            if rotation != 0:
+                page.set_rotation(rotation)
 
-        for tag in tags:
-            if tag not in marked_tags:
-                text_instances = rotated_page.search_for(tag)
-                for inst in text_instances:
-                    rect = adjust_rectangle(inst, rect_adjustment)
-                    annotation = rotated_page.add_rect_annot(rect)
-                    if annotation:
-                        annotation.set_colors(stroke=(1, 0, 0))
-                        annotation.update()
-                        marked_tags.add(tag)
-                        all_found_tags.add(tag)
-                    if tag not in tags_found:
-                        tags_found.append(tag)
-                    if tag in tags_not_found:
-                        tags_not_found.remove(tag)
+            for tag in tags:
+                if tag not in marked_tags:
+                    text_instances = page.search_for(tag)
+                    for inst in text_instances:
+                        rect = adjust_rectangle(inst, rect_adjustment)
+                        annotation = page.add_rect_annot(rect)
+                        if annotation:
+                            annotation.set_colors(stroke=(1, 0, 0))  # Rød markering
+                            annotation.update()
+                            marked_tags.add(tag)
+                            all_found_tags.add(tag)
+                            if tag not in tags_found:
+                                tags_found.append(tag)
+                            if tag in tags_not_found:
+                                tags_not_found.remove(tag)
+
+            # Tilbakestill rotasjon etter søk
+            if rotation != 0:
+                page.set_rotation(0)
 
     # Legg til rapport om manglende tags
     add_missing_tags_report(doc, tags_not_found)
