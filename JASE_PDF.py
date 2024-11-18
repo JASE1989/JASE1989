@@ -40,6 +40,12 @@ def remove_skew(image):
 def rotate_vertical_text(image):
     return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
+# Funksjon for å rotere PDF-side for vertikal tekst
+def rotate_page_for_vertical_text(page):
+    matrix = fitz.Matrix(0, -1, 1, 0)  # 90-graders rotasjon
+    page.set_rotation(90)  # Oppdaterer siden internt
+    return page
+
 # Funksjon for å justere markeringsrute størrelse
 def adjust_rectangle(rect, adjustment=4):
     x0, y0, x1, y1 = rect
@@ -97,8 +103,9 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
                             rect = fitz.Rect(bbox[0][0], bbox[0][1], bbox[2][0], bbox[2][1])
                             rect = adjust_rectangle(rect, rect_adjustment)
                             square = page.add_rect_annot(rect)
-                            square.set_colors(stroke=(1, 0, 0))
-                            square.update()
+                            if square:
+                                square.set_colors(stroke=(1, 0, 0))
+                                square.update()
 
                     marked_tags.add(tag)
                     all_found_tags.add(tag)
@@ -115,12 +122,6 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
     doc.close()
     output_pdf.seek(0)
     return output_pdf, all_found_tags
-
-# Funksjon for å rotere PDF-sider for vertikal tekst
-def rotate_page_for_vertical_text(page):
-    # Roter siden 90 grader (klokwise)
-    page.set_rotation(90)
-    return page
 
 # Funksjon for PyMuPDF og å markere tags i PDF
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
@@ -142,7 +143,7 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
     for page_num in range(doc.page_count):
         page = doc[page_num]
 
-        # Hvis du ønsker å håndtere vertikal tekst, kan du rotere siden her
+        # Rotér side for vertikal tekst (valgfritt)
         rotated_page = rotate_page_for_vertical_text(page)
 
         for tag in tags:
@@ -150,8 +151,12 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 text_instances = rotated_page.search_for(tag)
                 for inst in text_instances:
                     rect = adjust_rectangle(inst, rect_adjustment)
-                    rotated_page.add_rect_annot(rect).set_colors(stroke=(1, 0, 0)).update()
-                    marked_tags.add(tag)
+                    annotation = rotated_page.add_rect_annot(rect)
+                    if annotation:
+                        annotation.set_colors(stroke=(1, 0, 0))
+                        annotation.update()
+                        marked_tags.add(tag)
+                        all_found_tags.add(tag)
                     if tag not in tags_found:
                         tags_found.append(tag)
                     if tag in tags_not_found:
@@ -201,22 +206,19 @@ if pdf_files and excel_file and start_button:
         for pdf_file in pdf_files:
             merged_pdf.insert_pdf(fitz.open(stream=pdf_file.read(), filetype="pdf"))
 
-        rect_adjustment = 2  # Justering for markeringsstørrelse
-
-        # Marker tags i PDF-en basert på valgt metode
         if method == "OCR":
-            marked_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness, rect_adjustment)
+            result_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness)
         else:
-            marked_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness, rect_adjustment)
+            result_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness)
 
         st.write("### Funnet tags:")
         st.write(", ".join(found_tags))
 
         st.download_button(
-            label="Last ned den merkede PDF-en",
-            data=marked_pdf,
-            file_name="marked_pdf.pdf",
-            mime="application/pdf"
+            label="Last ned merket PDF",
+            data=result_pdf,
+            file_name="marked_tags.pdf",
+            mime="application/pdf",
         )
 
     except Exception as e:
