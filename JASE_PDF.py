@@ -116,6 +116,12 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
     output_pdf.seek(0)
     return output_pdf, all_found_tags
 
+# Funksjon for å rotere PDF-sider for vertikal tekst
+def rotate_page_for_vertical_text(page):
+    # Roter siden 90 grader (klokwise)
+    page.set_rotation(90)
+    return page
+
 # Funksjon for PyMuPDF og å markere tags i PDF
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
     doc = input_pdf
@@ -135,16 +141,17 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
+
+        # Hvis du ønsker å håndtere vertikal tekst, kan du rotere siden her
+        rotated_page = rotate_page_for_vertical_text(page)
+
         for tag in tags:
             if tag not in marked_tags:
-                text_instances = page.search_for(tag)
+                text_instances = rotated_page.search_for(tag)
                 for inst in text_instances:
                     rect = adjust_rectangle(inst, rect_adjustment)
-                    square = page.add_rect_annot(rect)
-                    square.set_colors(stroke=(1, 0, 0))
-                    square.update()
+                    rotated_page.add_rect_annot(rect).set_colors(stroke=(1, 0, 0)).update()
                     marked_tags.add(tag)
-                    all_found_tags.add(tag)
                     if tag not in tags_found:
                         tags_found.append(tag)
                     if tag in tags_not_found:
@@ -198,17 +205,19 @@ if pdf_files and excel_file and start_button:
 
         # Marker tags i PDF-en basert på valgt metode
         if method == "OCR":
-            output_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness, rect_adjustment)
+            marked_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness, rect_adjustment)
         else:
-            output_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness, rect_adjustment)
+            marked_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness, rect_adjustment)
 
-        # Vis tags som ikke ble funnet
-        st.write("### Tags som ikke ble funnet:")
-        missing_tags = list(set(tags) - found_tags)
-        st.write(", ".join(missing_tags))
+        st.write("### Funnet tags:")
+        st.write(", ".join(found_tags))
 
-        # Last ned markert PDF
-        st.download_button("Last ned markert PDF", output_pdf, file_name="marked_pdf.pdf", mime="application/pdf")
+        st.download_button(
+            label="Last ned den merkede PDF-en",
+            data=marked_pdf,
+            file_name="marked_pdf.pdf",
+            mime="application/pdf"
+        )
 
     except Exception as e:
-        st.error(f"Feil: {e}")
+        st.error(f"En feil oppstod: {e}")
