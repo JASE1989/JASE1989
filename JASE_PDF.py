@@ -27,20 +27,24 @@ def adjust_rectangle(rect, adjustment=6):
 
 # Funksjon for PyMuPDF
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
+    """
+    Funksjon for å markere tekst i PDF-dokumenter med PyMuPDF.
+    Hvis tagger er vanskelige å finne på grunn av ulike formateringer eller skriftstørrelser,
+    kan det være lurt å finjustere regex-mønstrene eller bruke andre verktøy som kan håndtere slike utfordringer.
+    """
     doc = input_pdf
     tags_found = set()  # Bruk et sett for å unngå duplikater
     tags_not_found = tags.copy()  # Initialisering av tags_not_found
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
-        # For strenge søk, let etter spesifikke mønstre som ser ut som:
-        # 4 sifre + J-PL- + en spesifikk struktur, f.eks. 1234J-PL-001-l-001-TC02-00
+        # Strengt søk
         pattern = re.compile(r'\d{4}J-PL-(\d+-l-\d+)-TC02-00', re.DOTALL)
     elif match_strictness == "Moderat":
-        # For moderate søk, let etter noe som har et tall etterfulgt av L og en kode
+        # Moderat søk
         pattern = re.compile(r'(\d{2}-L-\d{4})', re.DOTALL)
     else:
-        # For tolerant søk, let etter bare 4 sifre
+        # Tolerant søk
         pattern = re.compile(r'(\d{4})', re.DOTALL)
 
     for page_num in range(doc.page_count):
@@ -49,11 +53,10 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
         # Bruk regex på sidens tekst for å finne de spesifikke taggene
         page_text = page.get_text("text")  # Hent all tekst fra siden
         for tag in tags:
-            matches = pattern.findall(page_text)  # Finn matchende tags med regex
-            if matches:
-                for match in matches:
-                    if match not in tags_found:
-                        tags_found.add(match)
+            if re.search(pattern, page_text):  # Sjekk etter matchende tag
+                tags_found.add(tag)
+                if tag in tags_not_found:
+                    tags_not_found.remove(tag)
 
         # Søk etter tekstforekomster med "search_for" og marker dem
         for tag in tags:
@@ -65,6 +68,8 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 annotation.update()
                 if tag not in tags_found:
                     tags_found.add(tag)
+                if tag in tags_not_found:
+                    tags_not_found.remove(tag)
 
     # Lag en rapport over tagger som ikke ble funnet
     if tags_not_found:
