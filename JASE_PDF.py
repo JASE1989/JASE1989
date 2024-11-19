@@ -44,7 +44,7 @@ def rotate_vertical_text(image):
     return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
 
 # Funksjon for å justere markeringsrute størrelse
-def adjust_rectangle(rect, adjustment=4):
+def adjust_rectangle(rect, adjustment=6):
     x0, y0, x1, y1 = rect
     x0 -= adjustment
     y0 -= adjustment
@@ -62,7 +62,7 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
     reader = load_easyocr_reader()
     doc = input_pdf
     tags_found = []
-    tags_not_found = tags.copy()
+    tags_not_found = tags.copy()  # Initialisering av tags_not_found
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
@@ -95,16 +95,23 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
                 if tag in tags_not_found:
                     tags_not_found.remove(tag)
 
+    # Legg til en ny side med rapport om tagger som ikke ble funnet
+    if tags_not_found:
+        report_page = doc.new_page()
+        report_text = f"Tags som ikke ble funnet:\n{', '.join(tags_not_found)}"
+        report_page.insert_text((50, 50), report_text, fontsize=12)
+
     output_pdf = BytesIO()
     doc.save(output_pdf)
     doc.close()
     output_pdf.seek(0)
     return output_pdf, tags_found
 
-# Funksjon for PyMuPDF
+## Funksjon for PyMuPDF
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
     doc = input_pdf
     tags_found = []
+    tags_not_found = tags.copy()  # Initialisering av tags_not_found
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
@@ -118,6 +125,12 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 annotation.update()
                 if tag not in tags_found:
                     tags_found.append(tag)
+
+    # Legg til en ny side med rapport om tagger som ikke ble funnet
+    if tags_not_found:
+        report_page = doc.new_page()
+        report_text = f"Tags som ikke ble funnet:\n{', '.join(tags_not_found)}"
+        report_page.insert_text((50, 50), report_text, fontsize=12)
 
     output_pdf = BytesIO()
     doc.save(output_pdf)
@@ -136,24 +149,33 @@ start_button = st.button("Start søket")
 
 if pdf_files and excel_file and start_button:
     try:
+        # Hent tagger fra Excel
         tags = get_tags_from_excel(excel_file)
-        st.write("Tags:", ", ".join(tags))
-
-        merged_pdf = fitz.open()
-        for pdf_file in pdf_files:
-            merged_pdf.insert_pdf(fitz.open(stream=pdf_file.read(), filetype="pdf"))
-
-        if method == "OCR":
-            result_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness)
+        
+        # Valider om tagger finnes
+        if not tags:
+            st.error("Excel-filen inneholder ingen tagger. Vennligst sjekk filen.")
         else:
-            result_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness)
+            st.write("Tags:", ", ".join(tags))
 
-        st.write("Funnet tags:", ", ".join(found_tags))
-        st.download_button(
-            label="Last ned merket PDF",
-            data=result_pdf,
-            file_name="marked_tags.pdf",
-            mime="application/pdf",
-        )
+            merged_pdf = fitz.open()
+            for pdf_file in pdf_files:
+                merged_pdf.insert_pdf(fitz.open(stream=pdf_file.read(), filetype="pdf"))
+
+            # Velg prosessering basert på valgt metode
+            if method == "OCR":
+                result_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness)
+            else:
+                result_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness)
+
+            st.write("Funnet tags:", ", ".join(found_tags))
+            st.download_button(
+                label="Last ned merket PDF",
+                data=result_pdf,
+                file_name="marked_tags.pdf",
+                mime="application/pdf",
+            )
+    except ValueError as ve:
+        st.error(f"Feil ved lesing av Excel: {ve}")
     except Exception as e:
-        st.error(f"Feil oppstod: {e}")
+        st.error(f"En uventet feil oppstod: {e}")
