@@ -3,8 +3,6 @@ import re
 import fitz  # PyMuPDF
 import pandas as pd
 from io import BytesIO
-import easyocr
-import cv2
 import numpy as np
 
 # Funksjon for å hente tags fra Excel
