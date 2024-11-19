@@ -29,7 +29,7 @@ def adjust_rectangle(rect, adjustment=6):
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
     doc = input_pdf
     tags_found = set()  # Bruk et sett for å unngå duplikater
-    tags_not_found = tags.copy()  # Initialisering av tags_not_found
+    tags_not_found = set(tags)  # Initialisering av tags_not_found som et sett
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
@@ -58,7 +58,7 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 if match == tag_suffix:
                     if match not in tags_found:
                         tags_found.add(match)
-                        tags_not_found.remove(tag)
+                        tags_not_found.discard(tag)  # Bruk discard i stedet for remove for å unngå feil
 
         # Søk etter tekstforekomster med "search_for" og marker dem
         for tag in tags:
@@ -70,7 +70,7 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 annotation.update()
                 if tag not in tags_found:
                     tags_found.add(tag)
-                    tags_not_found.remove(tag)
+                    tags_not_found.discard(tag)  # Bruk discard i stedet for remove for å unngå feil
 
     # Lag en rapport over tagger som ikke ble funnet
     if tags_not_found:
