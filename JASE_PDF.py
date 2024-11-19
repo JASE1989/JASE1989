@@ -33,12 +33,14 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
+        # Strenge søk: Tillat linjeskift og mellomrom i tagger som f.eks. 1234J-PL-001-l-001-TC02-00
         pattern = re.compile(r'\d{4}J-PL-(\d+-l-\d+)-TC02-00', re.DOTALL)
     elif match_strictness == "Moderat":
-        # Fleksibel regex for å tillate linjeskift og mellomrom i tagger som 'L-44- 5015'
+        # Moderate søk: Tillat linjeskift og mellomrom i tagger som f.eks. L-44- 5015
         pattern = re.compile(r'L-\d{2}-\s?\d{0,4}\s*\d{4}', re.DOTALL)
     else:
-        pattern = re.compile(r'(\d{4})', re.DOTALL)
+        # Tolerante søk: Tillat bare 4 sifre med mulige mellomrom eller linjeskift
+        pattern = re.compile(r'(\d{4})\s*', re.DOTALL)
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
