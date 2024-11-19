@@ -193,7 +193,7 @@ def add_missing_tags_report(doc, tags_not_found):
         report_page.insert_text((50, 100), missing_tags_text, fontsize=10, color=(0, 0, 0))
 
 # Streamlit app-grensesnitt
-st.title("PDF Markeringsapp med OCR eller PyMuPDF")
+st.title("PDF Markeringsapp")
 
 pdf_files = st.file_uploader("Last opp PDF-filer", type="pdf", accept_multiple_files=True)
 excel_file = st.file_uploader("Last opp Excel-fil med tags", type="xlsx")
