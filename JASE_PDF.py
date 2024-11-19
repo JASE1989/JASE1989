@@ -3,7 +3,6 @@ import re
 import fitz  # PyMuPDF
 import pandas as pd
 from io import BytesIO
-import numpy as np
 
 # Funksjon for å hente tags fra Excel
 def get_tags_from_excel(excel_file, column_name='Tag'):
@@ -29,40 +28,40 @@ def adjust_rectangle(rect, adjustment=6):
 # Funksjon for PyMuPDF
 def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
     doc = input_pdf
-    tags_found = set()
-    tags_not_found = tags.copy()
+    tags_found = set()  # Bruk et sett for å unngå duplikater
+    tags_not_found = tags.copy()  # Initialisering av tags_not_found
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
         pattern = re.compile(r'\d{4}J-PL-(\d+-l-\d+)-TC02-00', re.DOTALL)
     elif match_strictness == "Moderat":
-        pattern = re.compile(r'(\d{2}-L-\d{4})', re.DOTALL)
+        # Fleksibel regex for å tillate linjeskift og mellomrom i tagger som 'L-44- 5015'
+        pattern = re.compile(r'L-\d{2}-\s?\d{0,4}\s*\d{4}', re.DOTALL)
     else:
         pattern = re.compile(r'(\d{4})', re.DOTALL)
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
-        page_text = page.get_text("text")
 
-        # Søk med regex og legg funn til i tags_found
-        regex_matches = set()
-        for match in pattern.findall(page_text):
-            regex_matches.add(match)
+        # Bruk regex på sidens tekst for å finne de spesifikke taggene
+        page_text = page.get_text("text")  # Hent all tekst fra siden
+        for tag in tags:
+            matches = pattern.findall(page_text)  # Finn matchende tags med regex
+            if matches:
+                for match in matches:
+                    if match not in tags_found:
+                        tags_found.add(match)
 
-        # Kombiner regex-funn og tags for markering
-        for tag in tags + list(regex_matches):
+        # Søk etter tekstforekomster med "search_for" og marker dem
+        for tag in tags:
             text_instances = page.search_for(tag)
-            if text_instances:
-                tags_found.add(tag)
-                if tag in tags_not_found:
-                    tags_not_found.remove(tag)
-
-                # Marker tekst i PDF
-                for inst in text_instances:
-                    rect = adjust_rectangle(inst, rect_adjustment)
-                    annotation = page.add_rect_annot(rect)
-                    annotation.set_colors(stroke=(1, 0, 0))  # Rød markering
-                    annotation.update()
+            for inst in text_instances:
+                rect = adjust_rectangle(inst, rect_adjustment)
+                annotation = page.add_rect_annot(rect)
+                annotation.set_colors(stroke=(1, 0, 0))  # Rød farge for markeringen
+                annotation.update()
+                if tag not in tags_found:
+                    tags_found.add(tag)
 
     # Lag en rapport over tagger som ikke ble funnet
     if tags_not_found:
@@ -84,20 +83,27 @@ st.title("PDF Markeringsapp")
 pdf_files = st.file_uploader("Last opp PDF-filer", type="pdf", accept_multiple_files=True)
 excel_file = st.file_uploader("Last opp Excel-fil med tags", type="xlsx")
 match_strictness = st.selectbox("Velg nøyaktighetsnivå", ("Streng", "Moderat", "Tolerant"))
+method = st.radio("Velg metode for markering", ("PyMuPDF"))
 start_button = st.button("Start søket")
 
 if pdf_files and excel_file and start_button:
     try:
+        # Hent tagger fra Excel
         tags = get_tags_from_excel(excel_file)
+        
+        # Valider om tagger finnes
         if not tags:
-            st.error("Excel-filen inneholder ingen tagger.")
+            st.error("Excel-filen inneholder ingen tagger. Vennligst sjekk filen.")
         else:
             st.write("Tags:", ", ".join(tags))
+
             merged_pdf = fitz.open()
             for pdf_file in pdf_files:
                 merged_pdf.insert_pdf(fitz.open(stream=pdf_file.read(), filetype="pdf"))
 
-            result_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness)
+            # Velg prosessering basert på valgt metode
+            if method == "PyMuPDF":
+                result_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness)
 
             st.write("Funnet tags:", ", ".join(found_tags))
             st.download_button(
