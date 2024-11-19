@@ -33,14 +33,15 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
-        # Strenge søk: Tillat linjeskift og mellomrom i tagger som f.eks. 1234J-PL-001-l-001-TC02-00
+        # For strenge søk, let etter spesifikke mønstre som ser ut som:
+        # 4 sifre + J-PL- + en spesifikk struktur, f.eks. 1234J-PL-001-l-001-TC02-00
         pattern = re.compile(r'\d{4}J-PL-(\d+-l-\d+)-TC02-00', re.DOTALL)
     elif match_strictness == "Moderat":
-        # Moderate søk: Tillat linjeskift og mellomrom i tagger som f.eks. L-44- 5015
-        pattern = re.compile(r'L-\d{2}-\s?\d{0,4}\s*\d{4}', re.DOTALL)
+        # For moderate søk, let etter noe som har et tall etterfulgt av L og en kode
+        pattern = re.compile(r'(\d{2}-L-\d{4})', re.DOTALL)
     else:
-        # Tolerante søk: Tillat bare 4 sifre med mulige mellomrom eller linjeskift
-        pattern = re.compile(r'(\d{4})\s*', re.DOTALL)
+        # For tolerant søk, let etter en tagg som følger mønsteret '44-L-2015', '44-L-2016', etc.
+        pattern = re.compile(r'\d{2}-L-(\d{4})', re.DOTALL)  # Matcher de 4 siste sifrene i taggen
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
@@ -48,11 +49,16 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
         # Bruk regex på sidens tekst for å finne de spesifikke taggene
         page_text = page.get_text("text")  # Hent all tekst fra siden
         for tag in tags:
-            matches = pattern.findall(page_text)  # Finn matchende tags med regex
-            if matches:
-                for match in matches:
+            # Hent de 4 siste sifrene fra taggen for toleransesøk
+            tag_suffix = tag.split('-')[-1]  # Får den siste delen av taggen (YYYY)
+            matches = pattern.findall(page_text)  # Finn matchende tallkombinasjoner
+
+            for match in matches:
+                # Match kun hvis den finner et tall som stemmer med de 4 siste sifrene i taggen
+                if match == tag_suffix:
                     if match not in tags_found:
                         tags_found.add(match)
+                        tags_not_found.remove(tag)
 
         # Søk etter tekstforekomster med "search_for" og marker dem
         for tag in tags:
@@ -64,6 +70,7 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 annotation.update()
                 if tag not in tags_found:
                     tags_found.add(tag)
+                    tags_not_found.remove(tag)
 
     # Lag en rapport over tagger som ikke ble funnet
     if tags_not_found:
