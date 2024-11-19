@@ -41,7 +41,7 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
         pattern = re.compile(r'(\d{2}-L-\d{4})', re.DOTALL)
     else:
         # For tolerant søk, let etter en tagg som følger mønsteret '44-L-2015', '44-L-2016', etc.
-        pattern = re.compile(r'\d{2}-L-(\d{4})', re.DOTALL)  # Matcher de 4 siste sifrene i taggen
+        pattern = re.compile(r'(\d{4})(?!\d)', re.DOTALL)  # Matcher de 4 siste sifrene i taggen
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
