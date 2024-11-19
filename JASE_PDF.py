@@ -51,15 +51,19 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                     tags_found.add(tag)
 
             elif match_strictness == "Tolerant":
-                # Søk etter de siste fire sifrene
+                # Søk etter YYYY og inkluder tekst forbundet til det
                 for four_digits in last_four_digits:
-                    if four_digits in page_text:
-                        text_instances = page.search_for(four_digits)
-                        for inst in text_instances:
-                            rect = adjust_rectangle(inst, rect_adjustment)
-                            annotation = page.add_rect_annot(rect)
-                            annotation.set_colors(stroke=(1, 0, 0))  # Rød farge
-                            annotation.update()
+                    # Regex for å finne YYYY med opptil 9 tegn til venstre og 8 til høyre
+                    pattern = re.compile(rf'[\w\-]{{0,9}}{four_digits}[\w\-]{{0,8}}')
+                    matches = pattern.findall(page_text)
+                    for match in matches:
+                        if four_digits in match:  # Sikre at vi markerer riktig kontekst
+                            text_instances = page.search_for(match.strip())
+                            for inst in text_instances:
+                                rect = adjust_rectangle(inst, rect_adjustment)
+                                annotation = page.add_rect_annot(rect)
+                                annotation.set_colors(stroke=(1, 0, 0))  # Rød farge
+                                annotation.update()
                             tags_found.add(four_digits)
 
     # Lag en rapport over tagger som ikke ble funnet
