@@ -98,7 +98,9 @@ def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2)
     # Legg til en ny side med rapport om tagger som ikke ble funnet
     if tags_not_found:
         report_page = doc.new_page()
-        report_text = f"Tags som ikke ble funnet:\n{', '.join(tags_not_found)}"
+        report_text = "Tags som ikke ble funnet:\n"
+        for tag in tags_not_found:
+            report_text += f"{tag}\n"  # Legger til hver tag på en ny linje
         report_page.insert_text((50, 50), report_text, fontsize=12)
 
     output_pdf = BytesIO()
@@ -126,16 +128,13 @@ def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2)
                 if tag not in tags_found:
                     tags_found.append(tag)
 
-# Legg til en ny side med rapport om tagger som ikke ble funnet
-if tags_not_found:
-    report_page = doc.new_page()
-    
-    # Endre rapportteksten slik at hver tag vises på en ny linje
-    report_text = "Tags som ikke ble funnet:\n"
-    for tag in tags_not_found:
-        report_text += f"{tag}\n"  # Legger til hver tag på en ny linje
-    
-    report_page.insert_text((50, 50), report_text, fontsize=12)
+    # Legg til en ny side med rapport om tagger som ikke ble funnet
+    if tags_not_found:
+        report_page = doc.new_page()
+        report_text = "Tags som ikke ble funnet:\n"
+        for tag in tags_not_found:
+            report_text += f"{tag}\n"  # Legger til hver tag på en ny linje
+        report_page.insert_text((50, 50), report_text, fontsize=12)
 
     output_pdf = BytesIO()
     doc.save(output_pdf)
