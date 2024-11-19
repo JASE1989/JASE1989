@@ -1,11 +1,8 @@
 import streamlit as st
 import re
 import fitz  # PyMuPDF
-import easyocr
 import pandas as pd
 from io import BytesIO
-import cv2
-import numpy as np
 
 # Funksjon for å hente tags fra Excel
 def get_tags_from_excel(excel_file, column_name='Tag'):
@@ -19,30 +16,6 @@ def get_tags_from_excel(excel_file, column_name='Tag'):
     except Exception as e:
         raise ValueError(f"Feil ved lesing av Excel: {e}")
 
-# Funksjon for å fjerne skjevhet i bilder før OCR
-def remove_skew(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.bitwise_not(gray)
-    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
-    
-    coords = np.column_stack(np.where(thresh > 0))
-    angle = cv2.minAreaRect(coords)[-1]
-    if angle < -45:
-        angle = -(90 + angle)
-    else:
-        angle = -angle
-
-    (h, w) = image.shape[:2]
-    center = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
-    
-    return rotated
-
-# Funksjon for å rotere vertikal tekst for OCR
-def rotate_vertical_text(image):
-    return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
-
 # Funksjon for å justere markeringsrute størrelse
 def adjust_rectangle(rect, adjustment=6):
     x0, y0, x1, y1 = rect
@@ -52,95 +25,60 @@ def adjust_rectangle(rect, adjustment=6):
     y1 += adjustment
     return fitz.Rect(x0, y0, x1, y1)
 
-# Cache EasyOCR-leser
-@st.cache_resource
-def load_easyocr_reader():
-    return easyocr.Reader(['no', 'en'])
-
-# Funksjon for OCR og markering
-def mark_text_with_easyocr(input_pdf, tags, match_strictness, rect_adjustment=2):
-    reader = load_easyocr_reader()
+# Funksjon for PyMuPDF
+def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
     doc = input_pdf
-    tags_found = []
+    tags_found = set()  # Bruk et sett for å unngå duplikater
     tags_not_found = tags.copy()  # Initialisering av tags_not_found
 
     # Regex-mønster for nøyaktighetsnivå
     if match_strictness == "Streng":
+        # For strenge søk, let etter spesifikke mønstre som ser ut som:
+        # 4 sifre + J-PL- + en spesifikk struktur, f.eks. 1234J-PL-001-l-001-TC02-00
         pattern = re.compile(r'\d{4}J-PL-(\d+-l-\d+)-TC02-00', re.DOTALL)
     elif match_strictness == "Moderat":
+        # For moderate søk, let etter noe som har et tall etterfulgt av L og en kode
         pattern = re.compile(r'(\d{2}-L-\d{4})', re.DOTALL)
     else:
+        # For tolerant søk, let etter bare 4 sifre
         pattern = re.compile(r'(\d{4})', re.DOTALL)
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
-        pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
-        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
-        
-        # Fjern skjevhet før OCR
-        img = remove_skew(img)
 
-        # OCR på originalbilde og rotert bilde
-        ocr_result = reader.readtext(img, detail=1, paragraph=False)
-        rotated_img = rotate_vertical_text(img)
-        ocr_result_vertical = reader.readtext(rotated_img, detail=1, paragraph=False)
-
-        # Kombiner resultater og søk etter tagger
-        all_text = ' '.join([text for _, text, conf in ocr_result if conf > 0.4] +
-                            [text for _, text, conf in ocr_result_vertical if conf > 0.4]).replace("\n", " ")
-
+        # Bruk regex på sidens tekst for å finne de spesifikke taggene
+        page_text = page.get_text("text")  # Hent all tekst fra siden
         for tag in tags:
-            if re.search(tag, all_text, re.IGNORECASE):
-                tags_found.append(tag)
-                if tag in tags_not_found:
-                    tags_not_found.remove(tag)
+            matches = pattern.findall(page_text)  # Finn matchende tags med regex
+            if matches:
+                for match in matches:
+                    if match not in tags_found:
+                        tags_found.add(match)
 
-    # Legg til en ny side med rapport om tagger som ikke ble funnet
-    if tags_not_found:
-        report_page = doc.new_page()
-        report_text = "Tags som ikke ble funnet:\n"
-        for tag in tags_not_found:
-            report_text += f"{tag}\n"  # Legger til hver tag på en ny linje
-        report_page.insert_text((50, 50), report_text, fontsize=12)
-
-    output_pdf = BytesIO()
-    doc.save(output_pdf)
-    doc.close()
-    output_pdf.seek(0)
-    return output_pdf, tags_found
-
-## Funksjon for PyMuPDF
-def mark_text_with_pymupdf(input_pdf, tags, match_strictness, rect_adjustment=2):
-    doc = input_pdf
-    tags_found = []
-    tags_not_found = tags.copy()  # Initialisering av tags_not_found
-
-    for page_num in range(doc.page_count):
-        page = doc[page_num]
-
+        # Søk etter tekstforekomster med "search_for" og marker dem
         for tag in tags:
             text_instances = page.search_for(tag)
             for inst in text_instances:
                 rect = adjust_rectangle(inst, rect_adjustment)
                 annotation = page.add_rect_annot(rect)
-                annotation.set_colors(stroke=(1, 0, 0))
+                annotation.set_colors(stroke=(1, 0, 0))  # Rød farge for markeringen
                 annotation.update()
                 if tag not in tags_found:
-                    tags_found.append(tag)
+                    tags_found.add(tag)
 
-    # Legg til en ny side med rapport om tagger som ikke ble funnet
+    # Lag en rapport over tagger som ikke ble funnet
     if tags_not_found:
         report_page = doc.new_page()
-        report_text = "Tags som ikke ble funnet:\n"
+        report_text = f"Tags som ikke ble funnet ({len(tags_not_found)} tags):\n"
         for tag in tags_not_found:
-            report_text += f"{tag}\n"  # Legger til hver tag på en ny linje
+            report_text += f"{tag}\n"
         report_page.insert_text((50, 50), report_text, fontsize=12)
 
     output_pdf = BytesIO()
     doc.save(output_pdf)
     doc.close()
     output_pdf.seek(0)
-    return output_pdf, tags_found
+    return output_pdf, list(tags_found)
 
 # Streamlit app-grensesnitt
 st.title("PDF Markeringsapp")
@@ -167,9 +105,7 @@ if pdf_files and excel_file and start_button:
                 merged_pdf.insert_pdf(fitz.open(stream=pdf_file.read(), filetype="pdf"))
 
             # Velg prosessering basert på valgt metode
-            if method == "OCR":
-                result_pdf, found_tags = mark_text_with_easyocr(merged_pdf, tags, match_strictness)
-            else:
+            if method == "PyMuPDF":
                 result_pdf, found_tags = mark_text_with_pymupdf(merged_pdf, tags, match_strictness)
 
             st.write("Funnet tags:", ", ".join(found_tags))
